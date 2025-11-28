@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Auto Shop</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/Styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    
+    <style>
+        /* CSS เฉพาะ Admin */
+        .admin-container {
+            padding: 80px 50px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .booking-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        .booking-table th, .booking-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        .booking-table th {
+            background-color: var(--header-bg);
+            color: white;
+            font-weight: bold;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.8em;
+            color: white;
+        }
+        .status-Confirmed { background-color: #ffc107; color: #333; }
+        .status-InProgress { background-color: #2196f3; }
+        .status-QCCheck { background-color: #00bcd4; }
+        .status-Done { background-color: var(--primary-color); }
+        .status-Cancelled { background-color: #f44336; }
+        .status-select {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        .update-btn {
+            background-color: var(--modal-primary-color);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        .update-btn:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="logo">
+            <i class="fas fa-tools"></i> Admin Dashboard
+        </div>
+        <a href="/" class="login-btn" style="border: none; background-color: #f44336;">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+    </div>
+
+    <div class="admin-container">
+        <h1>รายการจองคิวทั้งหมด</h1>
+        <p>คุณสามารถจัดการและอัปเดตสถานะงานซ่อมของลูกค้าได้ที่นี่</p>
+        
+        <p id="loadingMessage">กำลังโหลดข้อมูล...</p>
+        <table class="booking-table" id="bookingTable" style="display: none;">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>วันที่/เวลาจอง</th>
+                    <th>ลูกค้า</th>
+                    <th>เบอร์โทร/อีเมล</th>
+                    <th>ทะเบียนรถ</th>
+                    <th>บริการ</th>
+                    <th>สถานะปัจจุบัน</th>
+                    <th>จัดการสถานะ</th>
+                </tr>
+            </thead>
+            <tbody id="bookingList">
+                </tbody>
+        </table>
+        
+        <p id="errorMessage" style="color: red; margin-top: 20px;"></p>
+    </div>
+
+
+    <div class="footer" style="background-color: #333; color: #ccc; padding: 20px; text-align: center;">
+        © 2025 Customer Booking and Notification System | DIT PIM
+    </div>
+    
+    <script>
+        const API_URL = 'http://127.0.0.1:5000/api';
+        const statusMap = {
+            'Confirmed': 'ยืนยันจอง',
+            'In Progress': 'กำลังซ่อม',
+            'QC Check': 'ตรวจสอบคุณภาพ',
+            'Done': 'ซ่อมเสร็จสิ้น',
+            'Cancelled': 'ยกเลิก'
+        };
+        const statusOptions = ['Confirmed', 'In Progress', 'QC Check', 'Done', 'Cancelled'];
+
+        // 1. ดึงข้อมูลการจองทั้งหมดมาแสดง
+        async function fetchBookings() {
+            const loadingMessage = document.getElementById('loadingMessage');
+            const bookingTable = document.getElementById('bookingTable');
+            const bookingList = document.getElementById('bookingList');
+            const errorMessage = document.getElementById('errorMessage');
+
+            loadingMessage.style.display = 'block';
+            bookingTable.style.display = 'none';
+            errorMessage.textContent = '';
+            bookingList.innerHTML = '';
+            
+            try {
+                const response = await axios.get(`${API_URL}/admin/bookings`);
+                const bookings = response.data;
+                
+                loadingMessage.style.display = 'none';
+                
+                if (bookings.length === 0) {
+                    errorMessage.textContent = 'ไม่พบรายการจองในระบบ';
+                    return;
+                }
+                
+                bookings.forEach(booking => {
+                    const row = bookingList.insertRow();
+                    
+                    row.innerHTML = `
+                        <td>${booking.id}</td>
+                        <td>${booking.booking_date} ${booking.booking_time}</td>
+                        <td>${booking.fullname}</td>
+                        <td>${booking.phone_number}<br>${booking.email}</td>
+                        <td>${booking.license_plate}</td>
+                        <td>${booking.service_type}</td>
+                        <td><span class="status-badge status-${booking.status.replace(/\s/g, '')}">${statusMap[booking.status]}</span></td>
+                        <td>
+                            <select class="status-select" id="status-${booking.id}">
+                                ${statusOptions.map(s => 
+                                    `<option value="${s}" ${s === booking.status ? 'selected' : ''}>${statusMap[s]}</option>`
+                                ).join('')}
+                            </select>
+                            <button class="update-btn" onclick="updateStatus(${booking.id})">อัปเดต</button>
+                        </td>
+                    `;
+                });
+                
+                bookingTable.style.display = 'table';
+                
+            } catch (error) {
+                loadingMessage.style.display = 'none';
+                errorMessage.textContent = 'Failed to load bookings: ' + (error.response?.data?.error || 'Server error');
+            }
+        }
+
+        // 2. อัปเดตสถานะการจอง (TC-005)
+        async function updateStatus(bookingId) {
+            const selectElement = document.getElementById(`status-${bookingId}`);
+            const newStatus = selectElement.value;
+            
+            if (!confirm(`ยืนยันการเปลี่ยนสถานะของคิว ID ${bookingId} เป็น "${statusMap[newStatus]}" ใช่หรือไม่?`)) {
+                return;
+            }
+
+            try {
+                const response = await axios.post(`${API_URL}/admin/update_status/${bookingId}`, { status: newStatus });
+                alert(response.data.message);
+                // โหลดข้อมูลใหม่หลังจากอัปเดต
+                fetchBookings(); 
+            } catch (error) {
+                alert('อัปเดตสถานะล้มเหลว: ' + (error.response?.data?.error || 'Unknown error'));
+            }
+        }
+
+        // โหลดข้อมูลทันทีเมื่อหน้าเว็บโหลดเสร็จ
+        document.addEventListener('DOMContentLoaded', fetchBookings);
+    </script>
+</body>
+</html>
